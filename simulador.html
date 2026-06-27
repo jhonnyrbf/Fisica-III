@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simulador - Lei de Biot-Savart</title>
+    <!-- Tailwind CSS para estilização rápida e moderna -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js para o gráfico dinâmico -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; }
+        .input-cell { width: 100%; border: 1px solid #d1d5db; border-radius: 0.25rem; padding: 0.25rem; text-align: center; }
+        .input-cell:focus { outline: none; border-color: #3b82f6; box-shadow: 0 0 0 1px #3b82f6; }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+
+    <header class="max-w-6xl mx-auto mb-8 bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+        <h1 class="text-3xl font-bold text-gray-800">Simulador de Regressão Linear</h1>
+        <p class="text-gray-500 mt-2">Determinação da Permeabilidade Magnética do Ar (μ₀) - Experimento de Biot-Savart</p>
+    </header>
+
+    <main class="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-6">
+        
+        <div class="col-span-1 space-y-6">
+            
+            <!-- Painel de Constantes -->
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                <h2 class="text-xl font-semibold text-gray-700 mb-4">Parâmetros</h2>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm text-gray-500 mb-1">Voltas (N)</label>
+                        <input type="number" id="input-n" value="10" class="input-cell" onchange="updateAll()">
+                    </div>
+                    <div>
+                        <label class="block text-sm text-gray-500 mb-1">Raio R (m)</label>
+                        <input type="number" id="input-r" value="0.10" step="0.01" class="input-cell" onchange="updateAll()">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tabela de Dados Experimentais -->
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                <h2 class="text-xl font-semibold text-gray-700 mb-4">Dados Coletados</h2>
+                <table class="w-full text-sm text-left">
+                    <thead class="text-xs text-gray-700 uppercase bg-gray-50">
+                        <tr>
+                            <th class="px-2 py-2 text-center">Corrente I (A)</th>
+                            <th class="px-2 py-2 text-center">Campo B (µT)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="data-table-body">
+                        <!-- As linhas serão geradas pelo JavaScript -->
+                    </tbody>
+                </table>
+                <button onclick="addPoint()" class="mt-4 w-full bg-blue-50 text-blue-600 hover:bg-blue-100 font-medium py-2 px-4 rounded-lg transition-colors">
+                    + Adicionar Ponto
+                </button>
+            </div>
+        </div>
+
+        <div class="col-span-1 md:col-span-2 space-y-6">
+            
+            <!-- Cards de Resultados -->
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100 text-center">
+                    <p class="text-xs text-gray-500 uppercase tracking-wide">Coef. Angular (k)</p>
+                    <p class="text-xl font-bold text-gray-800 mt-1" id="res-k">0.00</p>
+                    <p class="text-xs text-gray-400">µT/A</p>
+                </div>
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100 text-center">
+                    <p class="text-xs text-gray-500 uppercase tracking-wide">Coef. Linear (a)</p>
+                    <p class="text-xl font-bold text-gray-800 mt-1" id="res-a">0.00</p>
+                    <p class="text-xs text-gray-400">µT</p>
+                </div>
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-blue-200 text-center relative overflow-hidden">
+                    <div class="absolute inset-0 bg-blue-50 opacity-50"></div>
+                    <div class="relative">
+                        <p class="text-xs text-blue-600 uppercase tracking-wide font-semibold">μ₀ Calculado</p>
+                        <p class="text-lg font-bold text-blue-900 mt-1" id="res-mu0">0.00e-0</p>
+                        <p class="text-xs text-blue-500">T·m/A</p>
+                    </div>
+                </div>
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-red-200 text-center relative overflow-hidden">
+                    <div class="absolute inset-0 bg-red-50 opacity-50"></div>
+                    <div class="relative">
+                        <p class="text-xs text-red-600 uppercase tracking-wide font-semibold">Erro Relativo</p>
+                        <p class="text-xl font-bold text-red-900 mt-1" id="res-erro">0.0%</p>
+                        <p class="text-xs text-red-500 font-medium" id="res-r2">R²: 0.0000</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Gráfico Interativo -->
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                <h2 class="text-xl font-semibold text-gray-700 mb-4">Gráfico de Dispersão e Ajuste Linear</h2>
+                <div class="relative h-[400px] w-full">
+                    <canvas id="regressionChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // Dados iniciais baseados na tabela do experimento
+        let dataPoints = [
+            { i: 0.25, b: 4.38 },
+            { i: 0.35, b: 5.76 },
+            { i: 0.45, b: 10.11 },
+            { i: 0.55, b: 14.78 },
+            { i: 0.65, b: 20.16 },
+            { i: 0.75, b: 26.12 },
+            { i: 0.85, b: 28.85 }
+        ];
+
+        let chartInstance = null;
+        const MU0_TEORICO = 4 * Math.PI * 1e-7;
+
+        // Renderiza as linhas da tabela no HTML
+        function renderTable() {
+            const tbody = document.getElementById('data-table-body');
+            tbody.innerHTML = '';
+            dataPoints.forEach((pt, index) => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td class="px-2 py-2"><input type="number" step="0.01" value="${pt.i}" class="input-cell" onchange="updateData(${index}, 'i', this.value)"></td>
+                    <td class="px-2 py-2"><input type="number" step="0.01" value="${pt.b}" class="input-cell" onchange="updateData(${index}, 'b', this.value)"></td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function updateData(index, field, value) {
+            dataPoints[index][field] = parseFloat(value) || 0;
+            updateAll();
+        }
+
+        function addPoint() {
+            dataPoints.push({ i: 0, b: 0 });
+            renderTable();
+            updateAll();
+        }
+
+        // Função para calcular a regressão linear (Mínimos Quadrados)
+        function calculateRegression(x, y) {
+            const n = x.length;
+            let sum_x = 0, sum_y = 0, sum_xy = 0, sum_xx = 0, sum_yy = 0;
+            
+            for (let i = 0; i < n; i++) {
+                sum_x += x[i];
+                sum_y += y[i];
+                sum_xy += (x[i] * y[i]);
+                sum_xx += (x[i] * x[i]);
+                sum_yy += (y[i] * y[i]);
+            }
+
+            const slope = (n * sum_xy - sum_x * sum_y) / (n * sum_xx - sum_x * sum_x);
+            const intercept = (sum_y - slope * sum_x) / n;
+            
+            // Cálculo do R²
+            const r_num = (n * sum_xy - sum_x * sum_y);
+            const r_den = Math.sqrt((n * sum_xx - sum_x * sum_x) * (n * sum_yy - sum_y * sum_y));
+            const r2 = Math.pow(r_num / r_den, 2);
+
+            return { slope, intercept, r2 };
+        }
+
+        function updateAll() {
+            const x = dataPoints.map(p => p.i);
+            const y = dataPoints.map(p => p.b);
+            
+            // Cálculos matemáticos
+            const reg = calculateRegression(x, y);
+            const N = parseFloat(document.getElementById('input-n').value);
+            const R = parseFloat(document.getElementById('input-r').value);
+            
+            // mu_0 = (2 * R * k_tesla) / N
+            const k_tesla = reg.slope * 1e-6;
+            const mu0_exp = (2 * R * k_tesla) / N;
+            const erro = Math.abs(mu0_exp - MU0_TEORICO) / MU0_TEORICO * 100;
+
+            // Atualização da Interface
+            document.getElementById('res-k').innerText = reg.slope.toFixed(2);
+            document.getElementById('res-a').innerText = reg.intercept.toFixed(2);
+            document.getElementById('res-mu0').innerText = mu0_exp.toExponential(3);
+            document.getElementById('res-erro').innerText = erro.toFixed(1) + '%';
+            document.getElementById('res-r2').innerText = 'R²: ' + reg.r2.toFixed(4);
+
+            updateChart(x, y, reg.slope, reg.intercept);
+        }
+
+        function updateChart(x, y, slope, intercept) {
+            const scatterData = x.map((xi, index) => ({ x: xi, y: y[index] }));
+            
+            // Gerar pontos para a linha de tendência (reta)
+            const minX = Math.min(...x) * 0.8;
+            const maxX = Math.max(...x) * 1.1;
+            const lineData = [
+                { x: minX, y: slope * minX + intercept },
+                { x: maxX, y: slope * maxX + intercept }
+            ];
+
+            const ctx = document.getElementById('regressionChart').getContext('2d');
+            
+            if (chartInstance) {
+                chartInstance.destroy();
+            }
+
+            chartInstance = new Chart(ctx, {
+                type: 'scatter',
+                data: {
+                    datasets: [{
+                        label: 'Dados Medidos',
+                        data: scatterData,
+                        backgroundColor: '#ef4444',
+                        pointRadius: 6,
+                        pointHoverRadius: 8
+                    }, {
+                        label: `Ajuste (B = ${slope.toFixed(2)}I ${intercept < 0 ? '-' : '+'} ${Math.abs(intercept).toFixed(2)})`,
+                        data: lineData,
+                        type: 'line',
+                        borderColor: '#3b82f6',
+                        borderWidth: 2,
+                        borderDash: [5, 5],
+                        fill: false,
+                        pointRadius: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: {
+                            title: { display: true, text: 'Corrente I (A)', font: { size: 14 } }
+                        },
+                        y: {
+                            title: { display: true, text: 'Campo Magnético B (µT)', font: { size: 14 } }
+                        }
+                    },
+                    plugins: {
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return `I: ${context.parsed.x} A, B: ${context.parsed.y} µT`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Inicialização
+        renderTable();
+        updateAll();
+    </script>
+</body>
+</html>
